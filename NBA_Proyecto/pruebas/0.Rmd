@@ -1,0 +1,728 @@
+---
+title: "La revolución del triple en la NBA"
+author: "Paula Cabo, Antonio Segovia"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+        code_folding: show
+        theme: journal
+        toc: 3
+        self_contained: yes
+        highlight: textmate
+        toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE)
+```
+## INTRODUCCIÓN
+
+El baloncesto ha cambiado mucho desde los años 90 hasta ahora. Detrás quedaron los tiempos de Jordan, Bird, Magic, los "Bad Boys", donde el juego era físico, lento y de pocos puntos. En la actualidad el juego es mucho más veloz, dinámico y se anotan muchos más puntos que antaño. Y esto se debe en gran parte a un culpable. El triple.
+
+En la temporada 1980-81, el jugador que más triples anotó fue Mike Bratz, con **57**. En la 90-91, Vernon Maxwell, con **172** triples, fue el que más anotó. La pasada temporada, James Harden anotó **378** triples, y el récord de triples en una temporada lo tiene Stephen Curry con **402** triples en la temporada 2015-16.
+
+[![Mike Bratz](./imagenes/MBratz.jpg "Mike Bratz")](https://www.basketball-reference.com/players/b/bratzmi01.html){target="_blank"}
+
+[![Vernon Maxwell](./imagenes/VMaxwell.jpg "Vernon Maxwell")](https://www.basketball-reference.com/players/m/maxweve01.html){target="_blank"}
+
+[![James Harden](./imagenes/JHarden.jpg "James Harden")](https://www.basketball-reference.com/players/h/hardeja01.html){target="_blank"}
+
+[![Stephen Curry](./imagenes/SCurry2.jpg "Stephen Curry")](https://www.basketball-reference.com/players/c/curryst01.html){target="_blank"}
+
+
+De arriba a abajo, Mike Bratz, Vernon Maxwell, James Harden y Stephen Curry. (Click en la imagen para ver su página en *BasketballReference*)
+
+
+### PAQUETES
+
+Para seguir el proyecto necesitaremos instalar los siguientes paquetes, aparte de los que ya tenemos
+
+```{r eval = FALSE}
+#install.packages("RColorBrewer")
+#install.packages("usmap")
+```
+
+Los paquetes a cargar son
+```{r message = FALSE}
+library(rio)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+library(ggthemes)
+library(RColorBrewer)
+library(usmap)
+library(jtools)
+library(gganimate)
+library(cowplot)
+library(rpivotTable)
+library(knitr)
+library(kableExtra)
+```
+
+
+### DATOS
+
+Hay muchas bases de datos de NBA, pero la inmensa mayoría son de pago. Sin embargo, hay una base de datos muy buena, que ha sido la que hemos utilizado para este proyecto. Los datos los hemos descargado a mano desde [BasketballReference](https://www.basketball-reference.com/) y guardado un archivo de texto con extensión csv para poder importarlos.
+
+```{r}
+data <- import("./datos/data.csv", setclass = "tibble")
+```
+
+## EL PROYECTO
+
+Antes que nada, una leyenda para entender el nombre de las variables.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+<CENTER> Season - Temporada </CENTER>
+<CENTER> Tm - Abreviatura del nombre del equipo </CENTER>
+<CENTER> W - Victorias </CENTER>
+<CENTER> L - Derrotas </CENTER>
+<CENTER> FG - Tiros totales anotados (de 2 y de 3) </CENTER>
+<CENTER> FGA - Tiros totales intentados </CENTER>
+<CENTER> FGp - Porcentaje de aciertos en tiros totales </CENTER>
+<CENTER> TP - Triples anotados </CENTER>
+<CENTER> TPA - Triples intentados </CENTER>
+<CENTER> TPp - Porcentaje de acierto en triples </CENTER>
+<CENTER> PTS - Puntos </CENTER>
+*Nota: Las variables relacionadas con los tiros y los puntos están expresadas por equipo y por partido.*
+
+</div>
+
+
+La NBA ha cambiado mucho a lo largo de la historia. En este proyecto analizaremos su historia más reciente. Vamos a quedarnos con los datos a partir de la temporada 2000-2001
+
+```{r}
+data <- data %>% filter(Season > 2000)
+```
+
+Aún asi, desde el año 2000 hay muchos equipos que o bien se han cambiado el nombre o bien se han mudado a otra ciudad. Este es el caso de los **Nets**, que se mudaron de *Nueva Jersey* a *Brooklyn*. También los **Charlotte Hornets**, un equipo que "resurgió" bajo el nombre de *Bobcats*, pero que hace unos años decidieron cambiarse el nombre a *Hornets*, como lo llevaban siendo desde muchos años atrás.
+
+El equipo de Charlotte pudo volver a llamarse Hornets después de que la franquicia de **Nueva Orleans** dejara libre ese nombre, pasándose a llamar de *Hornets* a *Pelicans*.
+
+Los **Grizzlies** se mudaron de *Vancouver* a *Memphis*. Y los **Seattle Supersonics** cambiaron de nombre y de ciudad pasando a ser los **Oklahoma City Thunder**.
+
+```{r}
+data$Tm <- gsub("NJN", "BRK", data$Tm) #- New Jersey Nets - Brooklyn Nets
+data$Tm <- gsub("CHO", "CHA", data$Tm) #- Charlotte Bobcats - Charlotte Hornets
+data$Tm <- gsub("VAN", "MEM", data$Tm) #- Vancouver Grizzlies - Memphis Grizzlies
+data$Tm <- gsub("NOH", "NOP", data$Tm) #- New Orleans Hornets - New Orleans Pelicans
+data$Tm <- gsub("NOK", "NOP", data$Tm) #- New Orleans/Oklahoma City Hornets - New Orleans Pelicans
+data$Tm <- gsub("SEA", "OKC", data$Tm) #- Seattle Supersonics - Oklahoma City Thunder
+
+```
+
+Ya hemos comentado que los Charlotte Hornets es un equipo "resurgido". Esto se debe a que dejaron de existir en el año 2002. Pero 3 años después volvieron a la liga, pero como un equipo nuevo, por lo tanto tuvieron que pasar por todo el proceso por el que tienen que pasar los equipos de nuevo ingreso en la liga. Es por eso por lo que eliminaremos los datos de la franquicia de Charlotte de antes de 2005, ya que el equipo nuevo de 2005 no tenía nada que ver con el equipo de 2002.
+
+```{r}
+data <- subset(data, Tm != "CHH")
+```
+
+Y ahora seleccionaremos los datos que nos convienen para nuestro estudio.
+```{r}
+data <- data %>% select(Season, Tm, W, L, FG, FGA, FGp, TP, TPA, TPp, PTS)
+```
+
+Vamos a hacer una primera visualización de los datos para observar la tendencia. Recordemos que estamos interesados en ver la evolución de los triples tirados por cada equipo a lo largo del tiempo.
+
+```{r}
+p <- data %>% ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+        labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2000-2019",
+        x = "Temporada",
+        y = "Intentos por partido") +
+        annotate("rect", xmin = "2010-11", xmax = Inf ,ymin = -Inf, ymax = Inf, alpha = 0.33, fill = "yellow")
+
+ggdraw(p) +  draw_image("./imagenes/NBA.png",
+               x = 0.25, y = 0.87, hjust = 1, vjust = 1, width = 0.15, height = 0.20)
+```
+
+Vamos a hacer una visualización animada de esta evolución, así que necesitaremos hacer algunas transformaciones.
+
+```{r message = FALSE, warning = FALSE}
+data1 <-  data %>% separate(Season, "Season", sep = "-")
+data1$Season <- as.numeric(data1$Season)
+
+data1 %>% ggplot(aes(Tm, TPA)) + geom_point(aes(color = Tm)) +
+    labs(title = "Evolución de triples intentados por equipo",
+        subtitle = "Año: {frame_time}",
+        x = "Equipo",
+        y = "Intentos por partido") +
+    transition_time(Season) +
+    ease_aes("linear")
+
+anim_save("evolucion-tp-equipos.gif")
+
+```
+
+Aunque los datos no se ven con claridad debido a la gran cantidad de equipos, se observa una tendencia claramente ascendente **desde 2010** (Rectángulo amarillo en el primer gráfico), así que trabajaremos con los datos a partir de dicha temporada.
+
+```{r}
+data <- data %>% filter(Season > 2009)
+```
+
+En la NBA, los equipos están divididos geográficamente por conferencias, y éstas por divisiones, habiendo un total de 6 divisiones de 5 equipos cada una.
+
+Para hacer esta partición por divisiones, primero vamos a crear un vector de estados y un bucle para asignar a cada equipo a su estado correspondiente.
+
+```{r}
+state <- vector("character", nrow(data))
+for (i in seq(1, nrow(data))) {
+    if(data$Tm[[i]] == "ATL"){
+        state[[i]] <- "GA"
+    }
+    else if(data$Tm[[i]] == "CHA"){
+        state[[i]] <- "NC"
+    }
+    else if(data$Tm[[i]] %in% c("MIA", "ORL")){
+        state[[i]] <- "FL"
+    }
+    else if(data$Tm[[i]] == "WAS"){
+        state[[i]] <- "WA"
+    }
+    else if(data$Tm[[i]] == "BOS"){
+        state[[i]] <- "MA"
+    }
+    else if(data$Tm[[i]] == "BRK"){
+        state[[i]] <- "NY"
+    }
+    else if(data$Tm[[i]] == "NYK"){
+        state[[i]] <- "NY"
+    }
+    else if(data$Tm[[i]] == "PHI"){
+        state[[i]] <- "PA"
+    }
+    else if(data$Tm[[i]] == "CHI"){
+        state[[i]] <- "IL"
+    }
+    else if(data$Tm[[i]] == "CLE"){
+        state[[i]] <- "OH"
+    }
+    else if(data$Tm[[i]] == "DET"){
+        state[[i]] <- "MI"
+    }
+    else if(data$Tm[[i]] == "IND"){
+        state[[i]] <- "IN"
+    }
+    else if(data$Tm[[i]] == "MIL"){
+        state[[i]] <- "WI"
+    }
+    else if(data$Tm[[i]] == "DEN"){
+        state[[i]] <- "CO"
+    }
+    else if(data$Tm[[i]] == "MIN"){
+        state[[i]] <- "MN"
+    }
+    else if(data$Tm[[i]] == "OKC"){
+        state[[i]] <- "OK"
+    }
+    else if(data$Tm[[i]] == "POR"){
+        state[[i]] <- "OR"
+    }
+    else if(data$Tm[[i]] == "UTA"){
+        state[[i]] <- "UT"
+    }
+    else if(data$Tm[[i]] %in% c("LAL", "LAC", "SAC", "GSW")){
+        state[[i]] <- "CA"
+    }
+    else if(data$Tm[[i]] == "PHO"){
+        state[[i]] <- "AZ"
+    }
+    else if(data$Tm[[i]] %in% c("HOU", "DAL", "SAS")){
+        state[[i]] <- "TX"
+    }
+    else if(data$Tm[[i]] == "NOP"){
+        state[[i]] <- "LA"
+    }
+    else if(data$Tm[[i]] == "MEM"){
+        state[[i]] <- "TN"
+    }
+}
+data <- cbind(data, state)
+```
+
+De manera similar, vamos a asignar a cada equipo a su división. Luego ordenaremos los datos para que salgan en el orden que deseamos.
+
+```{r}
+div <- vector("character", nrow(data))
+for (i in seq(1, nrow(data))) {
+    if(data$Tm[[i]] %in% c("ATL", "CHA", "MIA", "ORL", "WAS")){
+        div[[i]] <- "SE"
+    }
+    else if(data$Tm[[i]] %in% c("BOS", "BRK", "NYK", "PHI", "TOR")){
+        div[[i]] <- "AT"
+    }
+    else if(data$Tm[[i]] %in% c("CHI", "CLE", "DET", "IND", "MIL")){
+        div[[i]] <- "CEN"
+    }
+    else if(data$Tm[[i]] %in% c("DEN", "MIN", "OKC", "POR", "UTA")){
+        div[[i]] <- "NW"
+    }
+    else if(data$Tm[[i]] %in% c("GSW", "LAC", "LAL", "PHO", "SAC")){
+        div[[i]] <- "PA"
+    }
+    else{
+        div[[i]] <- "SW"
+    }
+}
+data <- cbind(data, div)
+data <- data %>% select(Season, Tm, state, div, everything())
+```
+
+Visto en el mapa, así quedaría la partición de divisiones según el estado del equipo.
+
+```{r}
+plot_usmap(regions = "states",
+    data = data, values = "div", labels = F) +
+    labs(title = "Separación divisional",
+        subtitle = "Así se dividen los equipos por división según su estado")
+
+```
+
+Vamos a representar los triples intentados por partido de cada equipo, separandolos en divisiones para mejor visualización. Haremos también interactivo cada gráfico. Nota: ggplotly aún no acepta ni subtítulos ni leyendas horizontales, así que nos cambiará el gráfico un poco.
+
+### DIVISIÓN SUDESTE
+
+Compuesta por: Atlanta Hawks, Charlotte Hornets, Miami Heat, Orlando Magic, Washington Wizards.
+
+```{r message = FALSE, warning = FALSE}
+plot_se <- data %>% filter(div == "SE") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "Set1") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Sudeste",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_se) +  draw_image("./imagenes/ATL.png",
+               x = 0.360, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/CHA.png",
+               x = 0.475, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/MIA.png",
+               x = 0.595, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/ORL.png",
+               x = 0.710, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/WAS.png",
+               x = 0.835, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_se)
+```
+
+De igual manera, con un código similar, construímos los gráficos de las demás divisiones
+
+### DIVISIÓN ATLÁNTICO
+
+Compuesta por: Boston Celtics, Brooklyn Nets, New York Knicks, Philadelphia 76ers, Toronto Raptors.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+plot_at <- data %>% filter(div == "AT") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "Dark2") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Atlántico",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_at) +  draw_image("./imagenes/BOS.png",
+               x = 0.365, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/NJN.png",
+               x = 0.485, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/NYK.png",
+               x = 0.605, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/PHI.png",
+               x = 0.720, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/TOR.png",
+               x = 0.8325, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_at)
+```
+
+### DIVISIÓN CENTRAL
+
+Compuesta por: Chicago Bulls, Cleveland Cavaliers, Detroit Pistons, Indiana Pacers, Milwaukee Bucks.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+plot_cen <- data %>% filter(div == "CEN") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "Set2") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Central",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_cen) +  draw_image("./imagenes/CHI.png",
+               x = 0.370, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/CLE.png",
+               x = 0.487, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/DET.png",
+               x = 0.6025, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/IND.png",
+               x = 0.715, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/MIL.png",
+               x = 0.830
+    , y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_cen)
+```
+
+### DIVISIÓN PACÍFICO
+
+Compuesta por: Golden State Warriors, Los Ángeles Clippers, Los Ángeles Lakers, Phoenix Suns, Sacramento Kings.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+plot_pac <- data %>% filter(div == "PA") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "Accent") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Pacífico",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_pac) +  draw_image("./imagenes/GSW.png",
+               x = 0.365, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/LAC.png",
+               x = 0.485, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/LAL.png",
+               x = 0.600, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/PHO.png",
+               x = 0.718, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/SAC.png",
+               x = 0.840, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_pac)
+```
+
+### DIVISIÓN SUROESTE
+
+Compuesta por: Dallas Mavericks, Houston Rockets, Memphis Grizzlies, New Orleans Pelicans, San Antonio Spurs.
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+plot_sw <- data %>% filter(div == "SW") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "Spectral") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Sudoeste",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_sw) +  draw_image("./imagenes/DAL.png",
+               x = 0.350, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/HOU.png",
+               x = 0.475, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/MEM.png",
+               x = 0.600, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/NOH.png",
+               x = 0.725, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/SAS.png",
+               x = 0.850, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_sw)
+```
+
+### DIVISIÓN NOROESTE
+
+Compuesta por: Denver Nuggets, Minesotta Timberwolves, Oklahoma City Thunder, Portland Trailblazers, Utah Jazz.
+
+```{r  echo = FALSE, message = FALSE, warning = FALSE}
+plot_nw <- data %>% filter(div == "NW") %>%
+    ggplot(aes(Season, TPA)) + geom_point(aes(color = Tm)) +
+    scale_color_brewer(palette = "RdBu") + theme_fivethirtyeight() +
+    labs(title = "Triples intentados por partido por cada equipo",
+        subtitle = "2010-2019 | División Noroeste",
+        x = "Temporada",
+        y = "Intentos por partido")
+
+ggdraw(plot_nw) +  draw_image("./imagenes/DEN.png",
+               x = 0.360, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/MIN.png",
+               x = 0.4775, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/OKC.png",
+               x = 0.595, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/POR.png",
+               x = 0.720, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20) +
+    draw_image("./imagenes/UTA.png",
+               x = 0.840, y = 0.15, hjust = 1, vjust = 1, width = 0.05, height = 0.20)
+
+ggplotly(plot_nw)
+```
+
+## SEGUIMOS CON EL PROYECTO
+
+Vemos que en nuestros datos los porcentajes están expresados entre 0 y 1 en vez de entre 0 y 100. Vamos a transformarlos.
+
+```{r}
+data <- data %>% mutate(TPpc = TPp * 100)
+data <- data %>% mutate(FGpc = FGp * 100)
+```
+
+También crearemos una variable que mida la proporción de triples intentados por el total de tiros intentados. Queremos esta variable expresada de 0 a 100 y con tres decimales.
+
+```{r}
+data <- data %>% mutate(prop = (TPA / FGA) * 100) #- Creamos la variable [0; 100]
+data$prop <- format(round(data$prop, 3), nsmall = 3) #- Reducimos los decimales a 3
+data$prop <- as.numeric(data$prop)
+
+```
+
+Calculamos la media por temporada de esta proporción
+
+```{r}
+data <- data %>% group_by(Season) %>% mutate(mprop = mean(prop))
+```
+
+
+Vamos a visualizar cómo no solo se ha evolucionado hacia tirar más triples, si no también a tirar menos de dos.
+
+```{r}
+data %>% ggplot(aes(Season, mprop)) + geom_point()
+```
+
+Sería lógico hacerse la siguiente pregunta: Aparte de tirar más, ¿se tira mejor? ¿Viene este incremento del número de triples intentados acompañado de un aumento de los porcentajes de tiro?
+
+```{r}
+data %>% group_by(Season) %>% ggplot(aes(TPA, TPpc)) +
+    geom_point(aes(color = Season)) + geom_smooth(se = FALSE) +
+    labs(title = "Relación triples intentados - porcentaje de aciertos")
+
+modela <- lm(TPpc ~ TPA, data)
+summ(modela)
+```
+
+Vemos con el gráfico y con el modelo de regresión lineal cómo no es el caso. A pesar de tirar más, los porcentajes no han visto una mejora significativa. Aunque el R2 de la regresión sea muy bajo, nos sirve para apreciar cómo apenas se ve influenciado el porcentaje de aciertos en triples por el número de intentos.
+
+¿Y qué hay de la relación entre triples intentados y puntos anotados? ¿Influye el uno sobre el otro? A priori cabe pensar que si, vamos a ver si es cierto. Primero construiremos un gráfico animado con gganimate, para observar la dirección del desplazamiento de los puntos. 
+
+```{r}
+data1 <-  data %>% separate(Season, "Season", sep = "-")
+data1$Season <- as.numeric(data1$Season)
+
+
+data1 %>% group_by(Season) %>% ggplot(aes(TPA, PTS)) +
+    geom_point(aes(color = Tm)) +
+    labs(title = "Relación triples intentados - porcentaje de aciertos",
+        subtitle = "Año: {frame_time}") +
+    transition_time(Season) +
+    ease_aes("linear")
+
+anim_save("evolucion-tp-puntos.gif")
+```
+
+Vemos que hay un *desplazamiento diagonal*, lo que nos hace pensar que sí, ambas variables estarían relacionadas. Vamos a modelar este desplazamiento con geom_smooth y a obtener un modelo de regresión lineal como hemos hecho antes.
+
+```{r message = FALSE}
+data %>% group_by(Season) %>% ggplot(aes(TPA, PTS)) +
+    geom_point(aes(color = Season)) + geom_smooth(se = FALSE)
+    labs(title = "Relación triples intentados - Puntos anotados")
+
+
+modela <- lm(PTS ~ TPA, data)
+summ(modela)
+```
+
+Aquí observamos que ambas variables sí que están correlacionadas. A partir de estos modelos podemos concluir que aumentar la cantidad de triples intentados no mejora los porcentajes, pero si que aumenta el número de puntos anotados, así que este incremento histórico tanto en tiros intentados como en puntos anotados se debe a que los partidos se juegan a mayor velocidad, los equipos no elaboran tanto los ataques y esto se traduce a un mayor número de posesiones por partido, por lo tanto más oportunidades de lanzar a canasta.
+
+## TABLAS
+
+Por último, vamos a acabar con unas tablas para acabar de observar los datos sobre el rendimiento de los equipos en este periodo desde 2010, a partir de esta "revolución del triple".
+
+### MEJORES TEMPORADAS
+
+
+```{r}
+df <- data %>% arrange(desc(W)) %>% select(Season, Tm, W) %>% head(5)
+df$pos <- c(1, 2, 2, 2, 3)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3),
+                c("#FFD700", "#CDC9C9", "#8B6914"))),
+    W = cell_spec(W, "html", bold = ifelse(W > 71, T, F),
+        underline = ifelse(W > 71, T, F))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_right",
+      fixed_thead = list(enabled = T, background = "lightblue"))
+    
+    
+```
+
+**¿Qué equipos han conseguido más victorias en una temporada desde 2010?**
+
+
+**1-2**: ![GSW](./imagenes/GSW.png "Golden State Warriors") 
+**2**: ![SAS](./imagenes/SAS.png "San Antonio Spurs")
+**3**: ![MIA](./imagenes/MIA.png "Miami Heat")
+
+*Nota: Las 73 victorias de los Warriors en 2015-16 es la mejor marca en la historia de la NBA.*
+
+### PEORES TEMPORADAS
+```{r}
+df <- data %>% arrange(W) %>% select(Season, Tm, W) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 4)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA"))),
+    W = cell_spec(W, "html", bold = ifelse(W < 8, T, F),
+        underline = ifelse(W < 8, T, F))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_left",
+      fixed_thead = list(enabled = T, background = "lightgreen"))
+```
+
+**¿Qué equipos han conseguido menos victorias en una temporada desde 2010?**
+
+
+**1**: ![CHA](./imagenes/CHA.png "Charlotte Hornets") 
+**2**: ![PHI](./imagenes/PHI.png "San Antonio Spurs")
+**3**: ![BKN](./imagenes/NJN.png "Brooklyn Nets")
+
+*Nota: Las 7 victorias de los Hornets en 2011 - 12 es la mejor marca en la historia de la NBA.*
+
+### MEJORES REGISTROS DE PUNTOS POR PARTIDO
+```{r}
+df <- data %>% arrange(desc(PTS)) %>%  select(Season, Tm, PTS) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_right",
+      fixed_thead = list(enabled = T, background = "#F5B7B1"))
+```
+**¿Qué equipos han conseguido mas puntos por partido durante una temporada desde 2010?**
+
+
+**1**: ![MIL](./imagenes/MIL.png "Milwaukee Bucks") 
+**2 - 3**: ![GSW](./imagenes/GSW.png "Golden State Warriors")
+
+### PEORES REGISTROS DE PUNTOS POR PARTIDO
+
+```{r}
+df <- data %>% arrange(PTS) %>% select(Season, Tm, PTS) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_left",
+      fixed_thead = list(enabled = T, background = "#E67E22"))
+```
+
+**¿Qué equipos han conseguido menos puntos por partido durante una temporada desde 2010?**
+
+**1**: ![CHA](./imagenes/CHA.png "Charlotte Hornets") 
+**2**: ![NOP](./imagenes/NOH.png "New Orleans Pelicans")
+**3**: ![TOR](./imagenes/TOR.png "Toronto Raptors")
+
+
+### MÁS TRIPLES INTENTADOS POR PARTIDO
+
+```{r}
+df <- data %>% arrange(desc(TPA)) %>%  select(Season, Tm, TPA) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_right",
+      fixed_thead = list(enabled = T, background = "#8E44AD"))
+```
+
+**¿Qué equipos han lanzado más triples por partido durante una temporada desde 2010?**
+
+**1 - 3**: ![HOU](./imagenes/HOU.png "Houston Rockets") 
+
+### MÁS TRIPLES ANOTADOS POR PARTIDO
+
+```{r}
+df <- data %>% arrange(desc(TP)) %>%  select(Season, Tm, TP) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_left",
+      fixed_thead = list(enabled = T, background = "#138D75"))
+```
+
+**¿Qué equipos han anotado más triples por partido durante una temporada desde 2010?**
+
+**1 - 3**: ![HOU](./imagenes/HOU.png "Houston Rockets") 
+
+
+### MAYOR PORCENTAJE DE TRIPLES SOBRE TIROS TOTALES
+
+```{r}
+df <- data %>% arrange(desc(prop)) %>%  select(Season, Tm, prop) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_right",
+      fixed_thead = list(enabled = T, background = "#E74C3C"))
+```
+
+**¿Qué equipos han tirado más triples sobre tiros totales por partido durante una temporada desde 2010?**
+
+**1 - 3**: ![HOU](./imagenes/HOU.png "Houston Rockets") 
+
+### MEJOR PORCENTAJE DE TRIPLES 
+
+```{r}
+df <- data %>% arrange(desc(TPpc)) %>%  select(Season, Tm, TPpc) %>% head(5)
+df$pos <- c(1, 2, 3, 4, 5)
+
+
+df %>% mutate(
+    pos = cell_spec(pos, "html", 
+            background = factor(pos, c(1, 2, 3, 4, 5),
+                c("#FFD700", "#CDC9C9", "#8B6914", "#FAFAFA", "#FAFAFA")))
+     ) %>% select(pos, everything()) %>% 
+kable(format = "html", escape = F) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "float_left",
+      fixed_thead = list(enabled = T, background = "#5D6D7E"))
+```
+
+**¿Qué equipos han tirado mejor de tres durante una temporada desde 2010?**
+
+**1**: ![GSW](./imagenes/GSW.png "Golden State Warriors") 
+**2**: ![PHO](./imagenes/PHO.png "Phoenix Suns") 
+**3**: ![GSW](./imagenes/GSW.png "Golden State Warriors") 
+
+
+Por último, una tabla interactiva para observar los datos que desees.
+
+```{r}
+rpivotTable(data, width = "100%", height = "400px")
+```
+

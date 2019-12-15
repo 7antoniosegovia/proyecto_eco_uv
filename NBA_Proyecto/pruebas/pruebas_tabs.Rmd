@@ -1,0 +1,22 @@
+---
+title: "Pruebas tabs"
+author: "Antonio Segovia"
+date: "22/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# R Markdown {.tabset .tabset-fade .tabset-pills}
+
+
+## First
+A first section
+
+## Second
+content of sub-chapter #2
+
+## Third
+content of sub-chapter #3

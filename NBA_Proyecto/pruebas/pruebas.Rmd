@@ -1,0 +1,70 @@
+---
+title: "La revolución del triple en la NBA"
+author: "Paula Cabo, Antonio Segovia"
+date: "`r Sys.Date()`"
+output:
+    prettydoc::html_pretty:
+        theme: cayman
+        code_folding: show
+        toc: 3
+        self_contained: yes
+        highlight: textmate
+        toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message = FALSE}
+library(rio)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+library(ggthemes)
+library(RColorBrewer)
+library(usmap)
+library(jtools)
+library(gganimate)
+library(cowplot)
+library(rpivotTable)
+library(knitr)
+library(kableExtra)
+library(DT)
+
+```
+
+
+```{r}
+data <- import("./datos/data.csv", setclass = "tibble")
+
+data$Tm <- gsub("NJN", "BRK", data$Tm) #- New Jersey Nets - Brooklyn Nets
+data$Tm <- gsub("CHO", "CHA", data$Tm) #- Charlotte Bobcats - Charlotte Hornets
+data$Tm <- gsub("VAN", "MEM", data$Tm) #- Vancouver Grizzlies - Memphis Grizzlies
+data$Tm <- gsub("NOH", "NOP", data$Tm) #- New Orleans Hornets - New Orleans Pelicans
+data$Tm <- gsub("NOK", "NOP", data$Tm) #- New Orleans/Oklahoma City Hornets - New Orleans Pelicans
+data$Tm <- gsub("SEA", "OKC", data$Tm) #- Seattle Supersonics - Oklahoma City Thunder
+
+data <- subset(data, Tm != "CHH")
+
+data <- data %>% select(Season, Tm, W, L, FG, FGA, FGp, TP, TPA, TPp, PTS)
+
+data <- data %>% filter(Season > 2009)
+
+data <- data %>% mutate(TPpc = TPp * 100)
+data <- data %>% mutate(FGpc = FGp * 100)
+
+data <- data %>% mutate(prop = (TPA / FGA) * 100) #- Creamos la variable [0; 100]
+data$prop <- format(round(data$prop, 3), nsmall = 3) #- Reducimos los decimales a 3
+data$prop <- as.numeric(data$prop)
+
+data <- data %>% group_by(Season) %>% mutate(mprop = mean(prop))
+
+```
+
+
+```{r}
+skimr::skim(data)
+```
+
